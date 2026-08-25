@@ -10,6 +10,7 @@
 
 #include "conf.h"
 #include "sysdep.h"
+#include <inttypes.h>
 #include "structs.h"
 #include "utils.h"
 #include "comm.h"
@@ -41,7 +42,9 @@ static const char *ban_types[] = {
 void load_banned(void)
 {
   FILE *fl;
-  int i, date, c;
+  int i, c;
+  intmax_t date;
+  time_t ban_date;
   char site_name[BANNED_SITE_LENGTH + 1], ban_type[100];
   char name[MAX_NAME_LENGTH + 1];
   char line[READ_SIZE], extra;
@@ -63,14 +66,20 @@ void load_banned(void)
       continue;
     }
 
-    if (sscanf(line, " %99s %50s %d %20s %c", ban_type, site_name, &date, name, &extra) != 4)
+    if (sscanf(line, " %99s %50s %" SCNdMAX " %20s %c",
+               ban_type, site_name, &date, name, &extra) != 4)
       continue;
+
+    ban_date = (time_t)date;
+    if ((intmax_t)ban_date != date)
+      continue;
+
     CREATE(next_node, struct ban_list_element, 1);
     strncpy(next_node->site, site_name, BANNED_SITE_LENGTH);	/* strncpy: OK (n_n->site:BANNED_SITE_LENGTH+1) */
     next_node->site[BANNED_SITE_LENGTH] = '\0';
     strncpy(next_node->name, name, MAX_NAME_LENGTH);	/* strncpy: OK (n_n->name:MAX_NAME_LENGTH+1) */
     next_node->name[MAX_NAME_LENGTH] = '\0';
-    next_node->date = date;
+    next_node->date = ban_date;
 
     for (i = BAN_NOT; i <= BAN_ALL; i++)
       if (!strcmp(ban_type, ban_types[i]))
@@ -107,8 +116,8 @@ static void _write_one_node(FILE *fp, struct ban_list_element *node)
 {
   if (node) {
     _write_one_node(fp, node->next);
-    fprintf(fp, "%s %s %ld %s\n", ban_types[node->type],
-	    node->site, (long) node->date, node->name);
+    fprintf(fp, "%s %s %" PRIdMAX " %s\n", ban_types[node->type],
+	    node->site, (intmax_t) node->date, node->name);
   }
 }
 
